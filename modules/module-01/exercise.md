@@ -35,6 +35,14 @@ For each bounded context you identify, fill in the table:
 There is no single correct answer: what matters is that you can justify each row.
 
 ---
+| Bounded Context | Responsibilities                                          | Owned Entities              | Team         |
+|-----------------|-----------------------------------------------------------|-----------------------------|--------------|
+| Identity        | it manages who users are and handles registration and profiles  | User, Session               | Platform     |
+| Game Library    | it manages the game catalog, search and metadata            | Game                        | Catalog      |
+| Activity        | it tracks what users are playing and also logs game actions          | Activity                    | Engagement   |
+| Notifications   | it sends alerts to friends when someone logs an activity        | Notification                | Engagement   |
+| Logging         | Records user actions for analytics and also to respect GDPR principles  | ConsentRecord, ActivityLog  | Platform     |
+| Auth            | it issues and validates JWT tokens for all services          | Token, Credential           | Platform     |
 
 ## Task 2 — Define service contracts _(~30 min)_
 
@@ -55,7 +63,35 @@ Payload: { activity_id, user_id, action, game_id, timestamp }
 ```
 
 Focus on the flows that feel non-obvious. You do not need to document every possible pair.
+**user-service → auth-service**
+- Direction: user-service to auth-service
+- Trigger: user logs in and needs a JWT token issued
+- Protocol: REST (sync — the login response has to include the token)
+- Payload: `{ user_id, username, email }`
 
+---
+
+**activity-service → logging-service**
+- Direction: activity-service to logging-service
+- Trigger: a user logs a new activity (started/completed a game)
+- Protocol: RabbitMQ message (async — logging doesnt need to block the activity response, if logging is slow or down the activity still saves fine)
+- Payload: `{ activity_id, user_id, game_id, action, timestamp }`
+
+---
+
+**activity-service → notification-service**
+- Direction: activity-service to notification-service
+- Trigger: a user logs an activity that their friends should see
+- Protocol: RabbitMQ message (async — same reason as above, notifications are best-effort, they shouldnt slow down activity logging)
+- Payload: `{ activity_id, user_id, game_id, action, timestamp }`
+
+---
+
+**gateway → all services**
+- Direction: gateway to user-service / game-service / activity-service / etc
+- Trigger: any client request coming in from the frontend
+- Protocol: REST (sync — the client is waiting for a response)
+- Payload: varies by route, gateway forwards the request with the JWT validated
 ---
 
 ## Task 3 — Draw the service map _(~20 min)_
@@ -76,8 +112,11 @@ This can be a sketch on paper, a whiteboard photo, or ASCII art committed to you
 Three questions to discuss as a team before you leave:
 
 1. Why does `notification-service` use Node.js instead of Python like the rest? What does that tell you about microservices and technology choices?
+its because in microservices each service can use whatever tech fits it best — notifications are event-driven and Node.js handles async event-based stuff really well. also it shows that microservices dont force you into one language, each team picks what makes sense for their problem.
 2. What is the risk of `activity-service` calling `logging-service` synchronously — why might you prefer an async event instead?
+if activity-service called logging-service synchronously and logging was slow or crashed, every activity request would also fail or be slow. with async (RabbitMQ), activity-service puts a message in the queue and moves on, logging picks it up whenever it can. the user gets a fast response and logging eventually catches up.
 3. Why does `logging-service` need a GDPR consent check before recording any activity?
+because recording what a user does is personal data. if the user said they dont want to be tracked, the logging-service has to respect that before writing anything. the consent has to be checked at the point of logging, not at signup, because a user can change their preference at any time.
 
 You do not need to write these answers down — they are warm-up for your REFLECTION.md.
 
