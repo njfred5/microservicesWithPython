@@ -19,6 +19,7 @@ All client requests now go through the gateway. No client ever calls a service d
 Think about what the client would need to know and manage if it talked to each service on its own port.
 
 > *Your answer:*
+honestly the thing that surprised me the most was how fragile it feels when one service needs to call another one. like when i was testing activity-service and forgot to start user-service first, everything just crashed. it made me realize that in a microservices setup you always have to think about what happens when the thing you depend on isnt there, which is something you never had to think about in the monolith because everything was in the same process.
 
 ---
 
@@ -31,7 +32,7 @@ The activity-service makes two outbound calls: one to validate the user (with re
 What is the consequence for the user in each case if the downstream service is unavailable?
 
 > *Your answer:*
-
+the user validation has to block the request because theres no point saving an activity for a user that doesnt exist, that would just be bad data. but the game enrichment is just extra info we attach to make the response nicer,the activity itself is still valid without it. so if game-service is down we just return null for the game field and the activity still gets saved. treating them differently means a game-service outage doesnt stop users from logging activities.
 ---
 
 ## 3. The tradeoff
@@ -43,7 +44,7 @@ Every time a client creates an activity, three services are involved synchronous
 What happens to the user experience if the slowest service in the chain takes 3 seconds to respond?
 
 > *Your answer:*
-
+every request now has to make an extra network hop through the gateway before it gets to the actual service. so if the gateway is slow or down, everything is slow or down even if all the services are fine. in the monolith there was no extra hop. but the trade-off is worth it because now clients only need to know one address and the gateway handles figuring out where to send things, and later it can also do auth checks in one place instead of every service doing it separately.
 ---
 
 *Keep this file. You will refer back to it during the oral presentation.*
