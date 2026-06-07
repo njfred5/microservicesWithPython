@@ -3,7 +3,11 @@ from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 from datetime import datetime, timezone
 import uuid
+
+from app.infrastructure.rabbitmq_publisher import publish_notification
+
 app = FastAPI(title="activity-service")
+
 USER_SERVICE = "http://localhost:8001"
 GAME_SERVICE = "http://localhost:8002"
 activities_db = []
@@ -35,7 +39,7 @@ async def enrich_game(game_id: str):
         return None
 @app.post("/v1/activities", status_code=201)
 async def create_activity(data: ActivityCreate):
-    await validate_user(data.user_id)
+    user = await validate_user(data.user_id)
     game = await enrich_game(data.game_id)
     activity = {
         "id": str(uuid.uuid4()),
@@ -46,6 +50,17 @@ async def create_activity(data: ActivityCreate):
         "game": game,
     }
     activities_db.append(activity)
+
+    game_title = game["title"] if game else data.game_id
+    username = user.get("username", data.user_id) if user else data.user_id
+
+    try:
+        publish_notification(
+            user_id=data.user_id,
+            message=f"{username} just {data.action} {game_title}",
+        )
+    except Exception:
+        pass
     return activity
 @app.get("/v1/activities")
 async def list_activities(limit: int = 20, offset: int = 0):
