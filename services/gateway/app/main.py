@@ -1,6 +1,6 @@
 import httpx
 from fastapi import FastAPI, Request, Response
-
+from jose import jwt, JWTError
 from app.config import settings
 
 app = FastAPI(title="gateway", version="1.0.0")
@@ -22,6 +22,15 @@ async def health():
 @app.api_route("/{path:path}", methods=["GET", "POST", "PUT", "PATCH", "DELETE"])
 async def proxy(request: Request, path: str):
     # Step 1 — parse the resource name from the path
+    if not path.startswith("v1/auth/token"):
+        auth_header = request.headers.get("authorization")
+        if not auth_header or not auth_header.startswith("Bearer "):
+            return Response(status_code=401, content="Missing or invalid token")
+        token = auth_header.split(" ")[1]
+        try:
+            jwt.decode(token, settings.secret_key, algorithms=[settings.algorithm])
+        except JWTError:
+            return Response(status_code=401, content="Invalid or expired token")
     segments = path.split("/")
     if len(segments) < 2:
         return Response(status_code=404, content="Not found")
