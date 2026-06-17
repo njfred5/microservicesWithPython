@@ -30,3 +30,10 @@ def add_game(db: Session, data: GameCreate) -> GameOut:
 def fetch_game_summary(game_id: str) -> dict | None:
     from app.infrastructure.cache import get_game_summary
     return get_game_summary(game_id)
+
+def remove_game(db: Session, game_id: str) -> None:
+    game = repository.get_game(db, game_id)
+    if game is None:
+        raise ValueError(f"Game {game_id} not found")
+    db.delete(game)
+    db.commit()
